@@ -101,6 +101,7 @@ Controller::Controller(DirModel *model, QObject *parent):
 
 Controller::~Controller()
 {
+    emit cancelReport();
     m_scanner.cancel();
     m_chartCalculator.cancelAll();
 }
@@ -166,18 +167,13 @@ QModelIndex Controller::findInSearchResults(const QModelIndex &from, bool backwa
 
 void Controller::onOpenDirAction()
 {
-    QFileDialog *dlg = new QFileDialog();
-    dlg->setFileMode(QFileDialog::Directory);
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->show();
-    connect(dlg, &QFileDialog::fileSelected, this, &Controller::onDirChosen);
+    QString dir = QFileDialog::getExistingDirectory(nullptr, "Select a directory.");
+    if (!dir.isEmpty())
+        emit onDirChosen(dir);
 }
 
 void Controller::onDirChosen(QString dir)
 {
-    m_chartCalculator.cancelAll();
-    m_search.cancel();
-    clearSearchResults();
     auto state = m_scanner.start(dir);
     QTimer *tmr =new QTimer(this);
     tmr->setInterval(1000);
@@ -201,6 +197,10 @@ void Controller::onDirChosen(QString dir)
         m_model->reset(tree);
         emit scanStateChanged(false);
         if (m_model->rowCount() > 0) {
+            emit cancelReport();
+            m_chartCalculator.cancelAll();
+            m_search.cancel();
+            clearSearchResults();
             onRequestCalculation(m_model->index(0, 0));
             m_currentRoot = dir;
         }
@@ -309,7 +309,7 @@ void Controller::onNextSearchResult(QModelIndex from, ModelIndexConsumer scrollF
     //m_searchFuture.waitForFinished();
     QEventLoop l;
     while (!m_searchFuture.isFinished()) {
-        l.processEvents();
+        l.processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::WaitForMoreEvents);
     }
     auto result = findInSearchResults(from, false);
     if (result.isValid())
@@ -322,7 +322,7 @@ void Controller::onPreviousSearchResult(QModelIndex from, ModelIndexConsumer scr
     //m_searchFuture.waitForFinished();
     QEventLoop l;
     while (!m_searchFuture.isFinished()) {
-        l.processEvents();
+        l.processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::WaitForMoreEvents);
     }
     auto result = findInSearchResults(from, true);
     if (result.isValid())
@@ -333,6 +333,8 @@ void Controller::onSaveReportAction()
 {
     using T = SaveReportService::ReportPtr;
     QString fileName = QFileDialog::getSaveFileName(nullptr, "Save File", "", "All Files (*)");
+    if (fileName.isEmpty())
+        return;
     DirTree *tree = m_model->indexToDirTree(m_model->index(0, 0)).first;
     QFuture<T> fut;
     fut = m_reportService.generateReport(&m_chartCalculator, tree);
@@ -341,11 +343,12 @@ void Controller::onSaveReportAction()
     progDlg.setMinimumDuration(0);
     QFutureWatcher<T> watcher;
     connect(&progDlg, &QProgressDialog::canceled, &watcher, &QFutureWatcher<T>::cancel);
+    connect(this, &Controller::cancelReport, &watcher, &QFutureWatcher<T>::cancel);
     watcher.setFuture(fut);
     progDlg.show();
     QEventLoop l;
     while (!fut.isFinished())
-        l.processEvents();
+        l.processEvents(QEventLoop::WaitForMoreEvents);
     if (fut.isResultReadyAt(0)) {
         auto [rv, err] = m_reportService.saveReport(fut.result(), fileName);
         if (rv != QFileDevice::NoError) {

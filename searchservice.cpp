@@ -75,7 +75,7 @@ public:
         m_queue.reserve(32);
         if (tree != nullptr) {
             m_queue.push_back(tree);
-            m_shared->busyCounter.fetchAndAddOrdered(1);
+            m_shared->busyCounter.fetchAndAddRelease(1);
         }
     }
 
@@ -93,11 +93,7 @@ public:
                 unlock();
                 process(t);
                 processChildren(t);
-                lock();
-                if (m_queue.empty()) {
-                    m_shared->busyCounter.fetchAndSubRelaxed(1);
-                }
-                unlock();
+                m_shared->busyCounter.fetchAndSubRelease(1);
             }
             else {
                 unlock();
@@ -110,11 +106,7 @@ public:
                 if (t != nullptr) {
                     process(t);
                     processChildren(t);
-                    lock();
-                    if (m_queue.empty()) {
-                        m_shared->busyCounter.fetchAndSubRelaxed(1);
-                    }
-                    unlock();
+                    m_shared->busyCounter.fetchAndSubRelease(1);
                 }
                 else {
                     int busy = m_shared->busyCounter.loadAcquire();
@@ -123,20 +115,19 @@ public:
                         return;
                     }
                     else {
-                        QThread::yieldCurrentThread();
+                        //QThread::yieldCurrentThread();
                     }
                 }
             }
         }
     }
 
-    DirTree *stealFrom(SearchWorker *thief)
+    DirTree *stealFrom()
     {
         lock();
         // Do not steal the victim's last item as that would not make more workers busy.
         if (m_queue.size() > 1) {
             auto *p = m_queue.dequeue();
-            m_shared->busyCounter.fetchAndAddRelaxed(1);
             unlock();
             return p;
         } else {
@@ -147,7 +138,7 @@ public:
 
     DirTree *stealFrom(int num)
     {
-        return m_shared->workers.at(num)->stealFrom(this);
+        return m_shared->workers.at(num)->stealFrom();
     }
 
     virtual void setSearchParam(const QString &s) = 0;
@@ -170,12 +161,14 @@ private:
             lock();
             if (m_queue.size() < m_queue.capacity()) {
                 m_queue.enqueue(tree->child(i));
+                m_shared->busyCounter.fetchAndAddRelease(1);
                 unlock();
             }
             else {
                 unlock();
                 process(tree->child(i));
                 processChildren(tree->child(i));
+                // This node was not taken from the queue, so no decrement.
             }
         }
     }
@@ -188,8 +181,10 @@ private:
 
     void gracefulEnd()
     {
-        if (m_shared->exitCounter.fetchAndSubRelaxed(1) == 1) {
+        if (m_shared->exitCounter.fetchAndSubRelease(1) == 1) {
+            lock();
             m_shared->promise->finish();
+            unlock();
         }
     }
 

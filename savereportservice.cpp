@@ -51,6 +51,7 @@ public:
                 auto e = std::make_exception_ptr(std::runtime_error("Error generating JSON"));
                 m_promise.setException(e);
             }
+            m_promise.finish();
         }
     }
 

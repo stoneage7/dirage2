@@ -118,13 +118,18 @@ MainWindow::MainWindow(Controller *controller, DirModel *model, QWidget *parent)
     });
     ui->actionSearchFixed->trigger();
 
-    m_searchDebouncer.setInterval(1000);
+    m_searchDebouncer.setInterval(500);
     m_searchDebouncer.setSingleShot(true);
     connect(searchBar, &QLineEdit::textChanged, this, [this]() {
         m_searchDebouncer.stop();
         m_searchDebouncer.start();
     });
     connect(&m_searchDebouncer, &QTimer::timeout, this, [this, searchBar]() {
+        m_controller->onSearch(searchBar->text(), m_searchMode);
+    });
+    connect(m_controller, &Controller::scanStateChanged, this, [this, searchBar]() {
+        m_lastSelected = QModelIndex();
+        m_searchDebouncer.stop();
         m_controller->onSearch(searchBar->text(), m_searchMode);
     });
     auto expandAndScroll = [this](const QModelIndex &index) {
@@ -217,7 +222,7 @@ void MainWindow::onScanStateChanged(bool active)
         m_lastScanMessage.reset();
         m_lastSelected = QModelIndex();
     }
-    ui->actionRescan->setEnabled(!active);
+    ui->actionRescan->setEnabled(!active && m_dirModel->rowCount() > 0);
     ui->actionSaveReport->setEnabled(!active && m_dirModel->rowCount() > 0);
     ui->actionCancel->setEnabled(active);
     updateStatusMessage();

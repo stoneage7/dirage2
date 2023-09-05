@@ -7,7 +7,7 @@ echo "run with buildah unshare $0"
 I=dirage2build
 LINUXDEPLOY="$HOME/bin/linuxdeploy-x86_64.AppImage"
 APPIMAGETOOL="$HOME/bin/appimagetool-x86_64.AppImage"
-IMAGENAME="DirAge2-1.0-x86_64.AppImage"
+IMAGENAME="DirAge2-1.1-x86_64.AppImage"
 
 if ! buildah images | grep -q $I; then
   C=$(buildah bud -q .)

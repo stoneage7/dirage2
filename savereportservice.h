@@ -27,7 +27,6 @@ public:
     QPair<QFileDevice::FileError, QString> saveReport(ReportPtr report, QString fileName);
 
 signals:
-
 };
 
 #endif // SAVEREPORTSERVICE_H

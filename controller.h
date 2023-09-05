@@ -32,6 +32,7 @@ signals:
     void scanStatusMessage(QString msg);
     void searchDone(int numResults);
     void searchNeedsExpanding(QModelIndex index);
+    void cancelReport();
 
 public slots:
     void onOpenDirAction();
@@ -45,7 +46,6 @@ public slots:
     void onNextSearchResult(QModelIndex from, ModelIndexConsumer scrollFunc);
     void onPreviousSearchResult(QModelIndex from, ModelIndexConsumer scrollFunc);
     void onSaveReportAction();
-
 
 private slots:
     void onDirChosen(QString dir);
